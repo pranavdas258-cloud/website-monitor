@@ -1,6 +1,5 @@
 import requests
-import hashlib
-import time
+from bs4 import BeautifulSoup
 
 URL = "https://upsconline.gov.in/marksheet/exam/marksheet_system/archives.php"
 
@@ -8,34 +7,39 @@ BOT_TOKEN = "8698742988:AAEYQcCvfd5zHdCBbWArWBOLEIQJMbo4op0"
 CHAT_ID = "6236141105"
 
 def send_message(text):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": text}
-    try:
-        requests.post(url, data=data)
-    except:
-        print("Failed to send Telegram message")
+    telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {
+        "chat_id": CHAT_ID,
+        "text": text
+    }
+    requests.post(telegram_url, data=data)
 
-def get_hash():
-    try:
-        r = requests.get(URL, timeout=10)
-        return hashlib.md5(r.text.encode()).hexdigest()
-    except:
-        print("Error fetching website")
-        return None
+response = requests.get(URL)
+soup = BeautifulSoup(response.text, "html.parser")
 
+links = []
+for a in soup.find_all("a"):
+    href = a.get("href")
+    if href and "marksheet" in href:
+        if href.startswith("http"):
+            links.append(href)
+        else:
+            links.append("https://upsconline.gov.in" + href)
 
-print("Starting website monitor...")
-send_message("✅ Website monitor started")
+links = list(set(links))
 
-old_hash = get_hash()
+try:
+    with open("last_links.txt","r") as f:
+        old_links = f.read().splitlines()
+except:
+    old_links = []
 
-while True:
-    print("Checking website...")
-    time.sleep(300)   # check every 5 minutes
-    
-    new_hash = get_hash()
+new_links = [l for l in links if l not in old_links]
 
-    if new_hash and new_hash != old_hash:
-        print("Website changed!")
-        send_message("⚠ Website Updated: " + URL)
-        old_hash = new_hash
+if new_links:
+    for link in new_links:
+        send_message("🆕 UPSC marksheet update detected:\n" + link)
+
+with open("last_links.txt","w") as f:
+    for link in links:
+        f.write(link + "\n")
